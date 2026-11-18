@@ -198,20 +198,41 @@ _ITEM_TEMPLATE = """[{i}]
 """
 
 
+def resolve_llm(lab_cfg: dict) -> dict:
+    """统一的 LLM 配置解析：环境变量 > lab.yml 默认值。
+
+    返回 {key, base_url, model, enabled}。run.py、check_llm.py、LLMScorer 共用。
+    """
+    cfg = lab_cfg.get("llm") or {}
+    key = ""
+    for env in ("LLM_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"):
+        key = os.environ.get(env, "").strip()
+        if key:
+            break
+    base_url = (
+        os.environ.get("LLM_BASE_URL", "").strip()
+        or cfg.get("base_url")
+        or "https://api.deepseek.com/v1"
+    ).rstrip("/")
+    model = os.environ.get("LLM_MODEL", "").strip() or cfg.get("model") or "deepseek-chat"
+    return {
+        "key": key,
+        "base_url": base_url,
+        "model": model,
+        "enabled": bool(cfg.get("enabled", True) and key),
+    }
+
+
 class LLMScorer:
     def __init__(self, llm_cfg: dict, lab_cfg: dict) -> None:
         self.cfg = llm_cfg or {}
         self.batch_size = max(1, int(self.cfg.get("batch_size") or 8))
         self.timeout = int(self.cfg.get("timeout") or 90)
         self.max_retries = max(1, int(self.cfg.get("max_retries") or 3))
-        # 环境变量优先于 lab.yml，方便在 Actions 里换供应商而不改代码
-        self.base_url = (
-            os.environ.get("LLM_BASE_URL", "").strip()
-            or self.cfg.get("base_url")
-            or "https://api.deepseek.com/v1"
-        ).rstrip("/")
-        self.model = os.environ.get("LLM_MODEL", "").strip() or self.cfg.get("model") or "deepseek-chat"
-        self.api_key = self._resolve_key()
+        resolved = resolve_llm(lab_cfg)
+        self.base_url = resolved["base_url"]
+        self.model = resolved["model"]
+        self.api_key = resolved["key"]
         self.auth_failed = False
         self.session = requests.Session()
         self.session.headers.update(
@@ -230,14 +251,6 @@ class LLMScorer:
         )
         self.calls = 0
         self.failures = 0
-
-    @staticmethod
-    def _resolve_key() -> str:
-        for env in ("LLM_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"):
-            v = os.environ.get(env, "").strip()
-            if v:
-                return v
-        return ""
 
     @property
     def enabled(self) -> bool:
@@ -419,8 +432,12 @@ def score_all(items: list[dict], lab_cfg: dict, opts: dict) -> list[dict]:
     limit = int((lab_cfg.get("scoring") or {}).get("max_llm_items") or 120)
 
     if not scorer.enabled:
-        why = "LLM 未启用" if not llm_cfg.get("enabled", True) else "未找到 API key"
-        warn(f"{why}，本次只用关键词打分（准确度会下降）")
+        why = "LLM 在 lab.yml 里被关闭" if not llm_cfg.get("enabled", True) else "没有找到 API key"
+        warn(
+            f"{why}，本次只用关键词打分（准确度会下降）。"
+            f"目标地址 {scorer.base_url} / 模型 {scorer.model}。"
+            "本地可先跑 python scripts/check_llm.py 自检"
+        )
         for it in items:
             it["mode"] = "keyword"
         return sorted(items, key=_rank_key, reverse=True)

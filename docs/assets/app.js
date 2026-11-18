@@ -138,15 +138,26 @@
       stat(Object.keys(groups).length, "来源分组"),
     ].join("");
 
-    const mode = meta.mode === "llm" ? "LLM 精排" : "关键词打分";
+    const llm = meta.llm || {};
+    const model = llm.model || "";
+    const modeLabel =
+      meta.mode === "llm" ? (model ? `LLM · ${model}` : "LLM 精排") : "关键词打分";
+    const tip =
+      meta.mode === "llm"
+        ? `本次由 ${model || "LLM"} 打分（${llm.base_url || ""}）`
+        : "本次由关键词打分";
     $("statBar").insertAdjacentHTML(
       "beforeend",
-      `<span class="mode-pill ${meta.mode === "llm" ? "" : "warn"}" title="筛选引擎">${esc(mode)}</span>`
+      `<span class="mode-pill ${meta.mode === "llm" ? "" : "warn"}" title="${esc(tip)}">${esc(
+        modeLabel
+      )}</span>`
     );
+
     if (meta.mode !== "llm") {
       $("modeNotice").hidden = false;
-      $("modeNotice").innerHTML =
-        "当前为<strong>关键词打分</strong>模式：在 GitHub 仓库里添加 secret <code>LLM_API_KEY</code> 后会自动切换为 LLM 精排，筛选准确度明显更高。";
+      $("modeNotice").innerHTML = llm.key_present
+        ? "API key 已配置，但<strong>这次 LLM 调用失败</strong>，已退回关键词打分。到 Actions 日志里看「测试 LLM 连通性」那一步的输出。"
+        : "当前为<strong>关键词打分</strong>模式：在 GitHub 仓库里添加 secret <code>LLM_API_KEY</code> 后会自动切换为 LLM 精排，筛选准确度明显更高。";
     }
 
     const interests = ((lab.interests || []).length ? lab.interests : []).map((g) => {

@@ -236,6 +236,7 @@ def write_meta(
     mode: str,
     run_stats: dict,
     today: dt.date,
+    llm_info: dict | None = None,
 ) -> None:
     lab = lab_cfg.get("lab") or {}
     scoring = lab_cfg.get("scoring") or {}
@@ -257,6 +258,12 @@ def write_meta(
         "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "generated_at_local": now.astimezone(dt.timezone(dt.timedelta(hours=8))).strftime("%Y-%m-%d %H:%M"),
         "mode": mode,
+        # 记录本次实际使用的模型，方便回头查「这批分数是谁打的」
+        "llm": {
+            "model": (llm_info or {}).get("model", ""),
+            "base_url": (llm_info or {}).get("base_url", ""),
+            "key_present": bool((llm_info or {}).get("key")),
+        } if llm_info else None,
         "lab": {
             "name": lab.get("name") or "Lab",
             "name_en": lab.get("name_en") or "",

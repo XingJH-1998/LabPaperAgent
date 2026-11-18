@@ -49,6 +49,34 @@ jobs:
       - name: 安装依赖
         run: pip install -r requirements.txt
 
+      - name: 检查 LLM 配置
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+        run: |
+          {
+            echo "### LLM 配置"
+            if [ -z "$LLM_API_KEY" ]; then
+              echo "- ❌ LLM_API_KEY **未注入**，本次会退回关键词打分"
+              echo "- 排查：Settings → Secrets and variables → **Actions** → Repository secrets，名字必须完全等于 LLM_API_KEY"
+              echo "- 注意不要建在 Environment secrets 里（除非 workflow 里声明了 environment）"
+              echo "::warning title=LLM_API_KEY 未注入::本次运行将使用关键词打分"
+            else
+              echo "- ✅ LLM_API_KEY 已注入（长度 ${#LLM_API_KEY}）"
+            fi
+            echo "- LLM_BASE_URL：${LLM_BASE_URL:-（未设置，用 config/lab.yml 的 https://api.deepseek.com/v1）}"
+            echo "- LLM_MODEL：${LLM_MODEL:-（未设置，用 config/lab.yml 的 deepseek-chat）}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 测试 LLM 连通性
+        continue-on-error: true
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+        run: python scripts/check_llm.py
+
       - name: 抓取 + 筛选 + 生成网页数据
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}

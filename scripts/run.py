@@ -23,7 +23,7 @@ import store  # noqa: E402
 from common import load_config, log, today_utc, warn  # noqa: E402
 from enrich import Enricher  # noqa: E402
 from fetchers import fetch_all  # noqa: E402
-from scoring import KeywordScorer, score_all  # noqa: E402
+from scoring import KeywordScorer, resolve_llm, score_all  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -178,7 +178,15 @@ def _finish_outputs(
         return
     digest = store.build_digest(today)
     store.write_digest(digest, today)
-    store.write_meta(lab_cfg, digest, feeds_cfg, mode=_mode(lab_cfg), run_stats=stats, today=today)
+    store.write_meta(
+        lab_cfg,
+        digest,
+        feeds_cfg,
+        mode=_mode(lab_cfg),
+        run_stats=stats,
+        today=today,
+        llm_info=resolve_llm(lab_cfg),
+    )
     store.write_rss(digest, lab_cfg)
 
     if kept and not args.no_notify:
@@ -231,6 +239,7 @@ def run_rescore(
             mode="llm" if any(it.get("llm") for it in digest) else "keyword",
             run_stats={"fetched": 0, "new": 0, "kept": len(digest), "rescore": total},
             today=today,
+            llm_info=resolve_llm(lab_cfg),
         )
         store.write_rss(digest, lab_cfg)
         log(f"重算完成：{total} 篇文献，当前通过阈值 {len(digest)} 篇")

@@ -256,6 +256,22 @@ scoring:
 
 ## 7. 常见问题
 
+**Q：配了 `LLM_API_KEY`，但页面还是显示「关键词打分」**
+说明 key 没有进到运行环境，不是模型不可用。按顺序查：
+1. Secret 名字必须**完全等于** `LLM_API_KEY`（区分大小写，不能有空格）
+2. 必须建在 Settings → Secrets and variables → **Actions** → Repository secrets；建在 Environment secrets 里不会注入
+3. Secret 是在这次运行**之前**保存的吗（GitHub 在任务启动时读取，中途改不生效）
+4. 点 Actions →「文献速览」→ Run workflow 重跑，然后看运行摘要里的 **LLM 配置** 段落和 **测试 LLM 连通性** 步骤
+
+本地自检（会打印地址、模型、HTTP 状态，不消耗额度）：
+
+```bash
+export LLM_API_KEY=sk-...
+python scripts/check_llm.py
+```
+
+页面顶部黄条会区分两种情况：key 没配（提示去配）、key 配了但调用失败（提示去看日志）。确认跑通后，右上角标签会显示 `LLM · deepseek-chat` 这样的实际模型名。
+
 **Q：Actions 报 `LLM 鉴权失败（HTTP 401）`**
 Secret 名字必须是 `LLM_API_KEY`；换供应商时记得同时改 `LLM_BASE_URL` 和 `LLM_MODEL`。DeepSeek 的 base_url 是 `https://api.deepseek.com/v1`。
 
