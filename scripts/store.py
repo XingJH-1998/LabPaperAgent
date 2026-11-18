@@ -195,7 +195,8 @@ def _slim(it: dict, today_s: str) -> dict:
 
 
 def rewrite_archive(month: str, items: list[dict]) -> None:
-    """整月覆盖写入（重算分数后使用）。"""
+    """整月覆盖写入（重算分数后使用）。保留条目原有的 added 日期。"""
+    items = [_slim(it, it.get("added") or it.get("date") or "") for it in items]
     items = sorted(items, key=lambda x: (x.get("date") or "", x.get("score") or 0), reverse=True)
     write_json(_archive_path(month), {"month": month, "count": len(items), "items": items})
 
