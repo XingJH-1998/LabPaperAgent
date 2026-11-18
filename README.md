@@ -21,14 +21,14 @@
       ▼                            │
 ┌──────────────────────┐           │
 │ 抓取                  │           │
-│  · OpenAlex（关键词/ISSN）        │
+│  · 期刊官方 RSS                  │
 │  · PubMed E-utilities │           │
 │  · bioRxiv / 期刊 RSS │           │
 └──────────┬───────────┘           │
            ▼                       │
    跨源去重（DOI + 标题指纹）        │
            ▼                       │
-   摘要回填（OpenAlex→Crossref→EuropePMC→S2）
+   字段回填（摘要/作者：OpenAlex→Crossref→EuropePMC→S2）
            ▼                       │
 ┌──────────────────────────────────┴───┐
 │ 打分                                   │
@@ -47,9 +47,22 @@
 
 三个设计取舍值得知道：
 
-- **PubMed 官方「检索式 RSS」已经停用**（NCBI 2022 年下线）。本项目用 E-utilities（`esearch` + `efetch`）等效实现，检索式写法完全一样，还能顺带拿到完整结构化摘要。
-- **纯生态学期刊大多不在 PubMed**。`Ecography`、`Journal of Ecology`、`Journal of Biogeography`、`Diversity and Distributions` 这些刊在 PubMed 里的记录只有几十条，靠 PubMed 会漏掉你 lab 最核心的文献。所以主通道用 **OpenAlex**（1.2 亿+ 作品，免 key，含摘要）。
-- **很多期刊 TOC 根本没有摘要**（Wiley、Springer、Elsevier 的 RSS 只有标题，ScienceDirect/MDPI 直接反爬 403）。所以有一步「摘要回填」，缺失时按 DOI 逐级去 OpenAlex / Crossref / Europe PMC / Semantic Scholar 找。
+- **只订期刊，不做全文检索。** `config/feeds.yml` 里列出的每一本刊就是全部来源，没有关键词监控。想加刊就加一段 YAML，想删刊就删掉那段。
+- **各出版社的 RSS 路径规则不统一，踩过坑记在这里**（都是实测可用的）：
+
+  | 出版社 | 地址格式 | 坑 |
+  |---|---|---|
+  | Wiley | `onlinelibrary.wiley.com/feed/{ISSN}/most-recent` | **ISSN 必须去掉连字符**：`14610248` ✅ / `1461-0248` ❌ |
+  | BES / ESA 系 | `besjournals.` / `esajournals.` + 同上 | 子域不同，路径规则相同 |
+  | Nature | `www.nature.com/{缩写}.rss` | 只给最近 8 篇 |
+  | Cell Press | `www.cell.com/{刊路径}/inpress.rss` | 用 `/rss` 会 403，必须 `inpress.rss` |
+  | Springer | `link.springer.com/search.rss?facet-journal-id={ID}` | `/journal/{id}/rss` 已失效 |
+  | bioRxiv | `connect.biorxiv.org/biorxiv_xml.php?subject={学科}` | 是 RDF 格式，不是标准 RSS |
+  | arXiv | `rss.arxiv.org/rss/{分类}` | |
+
+  ScienceDirect 和 MDPI 目前对程序请求返回 403，抓不到，只能换成别的刊。
+
+- **期刊 RSS 大多不给摘要。** Wiley 的 description 只有「刊名, 卷期」，Springer/Cell 有摘要但 Springer 不给作者。所以有一步「字段回填」：按 DOI 逐级去 OpenAlex → Crossref → Europe PMC → Semantic Scholar 补齐，实测 Wiley 的补全率约 95%。
 
 ---
 
@@ -167,66 +180,55 @@ scoring:
 
 ### 4.3 订阅源 → `config/feeds.yml`
 
-四类源，加一个 feed 就是加一段 YAML：
+**一本刊 = 一段 YAML**，现在预置了 40 本（24 本默认开启）。加一本刊只需要改 `id` / `name` / `url`：
 
 ```yaml
-# ① OpenAlex 关键词监控（生态学首选）
-- id: oa-my-topic
-  group: "关键词监控"
-  name: "我的方向"
-  type: openalex
-  queries:
-    - "urban ecology"
-    - "city biodiversity"
-  lookback_days: 14
-  max_items: 50
-```
-
-```yaml
-# ② 期刊整刊 TOC（用 ISSN，印刷版|电子版）。没有 RSS 的刊也能订。
-- id: toc-ecography
-  group: "期刊 TOC"
-  name: "Ecography"
-  type: openalex
-  issn: "0906-7590|1600-0587"
-  lookback_days: 20
-```
-
-```yaml
-# ③ PubMed 检索式（语法和 PubMed 搜索框一致）
-- id: pubmed-my-query
-  group: "PubMed"
-  name: "PubMed · 我的检索式"
-  type: pubmed
-  term: >
-    ("invasive species"[tiab] OR "alien species"[tiab])
-    AND ("climate change"[tiab])
-  lookback_days: 30
-  max_items: 40
-```
-
-```yaml
-# ④ 任意 RSS / Atom（bioRxiv、arXiv、期刊官方 feed、实验室博客都行）
-- id: my-rss
-  group: "预印本"
-  name: "bioRxiv · Ecology"
+- id: rss-your-journal
+  group: "生态学核心"          # 决定网页左侧的来源分组
+  name: "Your Journal"
   type: rss
-  url: "https://connect.biorxiv.org/biorxiv_xml.php?subject=ecology"
+  url: "https://onlinelibrary.wiley.com/feed/13652745/most-recent"
+  lookback_days: 30           # 多久以前算「新」，默认 30
+  max_items: 30               # 每次最多取多少条
 ```
 
-**找 ISSN**：期刊主页 → 关于/投稿页，或 [portal.issn.org](https://portal.issn.org)。
-**找 RSS**：Nature 系 `https://www.nature.com/<刊名缩写>.rss`；bioRxiv 用上面的 subject 地址；arXiv 用 `https://rss.arxiv.org/rss/<分类>`。
-Wiley / ScienceDirect / MDPI / Cell 的 RSS 现在基本都 403 或已下线，这类刊请用 ② 或 ③。
+不想要某本刊：把 `enabled` 改成 `false`（保留配置，随时能开回来），或者整段删掉。
+
+**怎么拿到正确的 RSS 地址？** 打开期刊页面，找 "Most recent (RSS)" 之类的链接，右键复制链接地址，粘到 `url`。各社的规则见上面第 1 节那张表——最常踩的坑是 Wiley 的 ISSN **不能带连字符**。
+
+**怎么找 ISSN**：期刊主页的关于/投稿页，或 [portal.issn.org](https://portal.issn.org)。
+**怎么找 Springer 的期刊 ID**：随便打开一篇该刊文章，URL 里 `link.springer.com/article/10.1007/s10530-...` 的刊 ID 在 `search.rss?facet-journal-id=` 里试；也可在期刊主页 URL `link.springer.com/journal/10530` 里看到。
+
+预置清单里包含（默认开启的 24 本）：
+
+| 分组 | 期刊 |
+|---|---|
+| 生态学核心 | Ecology Letters、Ecology、Ecological Monographs、Ecological Applications、Journal of Ecology、Journal of Applied Ecology、Methods in Ecology and Evolution |
+| 全球变化与生物地理 | Global Change Biology、Global Ecology and Biogeography、Journal of Biogeography、Diversity and Distributions、Ecography、Nature Climate Change |
+| 入侵与保护 | Biological Invasions、NeoBiota、Conservation Biology、Landscape Ecology、Biodiversity and Conservation |
+| 综合与交叉 | Nature Ecology & Evolution、Trends in Ecology & Evolution、Frontiers in Ecology and Evolution、Ecology and Society、Oecologia |
+| 预印本 | bioRxiv · Ecology |
+
+另有 16 本默认关闭（Journal of Animal Ecology、Functional Ecology、Conservation Letters、People and Nature、Ecology and Evolution、Restoration Ecology、Remote Sensing in Ecology and Conservation、Journal of Vegetation Science、Applied Vegetation Science、Plant Ecology、Nature、Nature Communications、Science、PNAS、bioRxiv 进化、arXiv q-bio.PE），改 `enabled: true` 即可启用。
 
 ### 4.4 关键词词表
 
 `lab.yml` 里的 `lexicon`：
 
-- `must`：命中说明很可能相关，权重最高（标题命中 9 分、摘要命中 3.5 分）
-- `boost`：上下文信号（`transferability`、`uncertainty`、`auc`…）
-- `exclude`：命中显著扣分（跨领域检索时的噪声词，比如 `clinical trial`）
+- `must`：高辨识度术语（标题命中 9 分、摘要命中 3.5 分）
+- `soft`：常见但不够具体的说法（标题 4 分、摘要 1.6 分），如 `habitat suitability`
+- `boost`：上下文信号，如 `transferability`、`uncertainty`、`auc`
+- `exclude`：命中显著扣分（-45），如 `clinical trial`
 
-最终分 = `100 × raw / (raw + 14)`，raw 是加权和。低于 120 字符的摘要会被压到 55 分以下，避免「信息不足却拿高分」。
+最终分 = `100 × raw / (raw + k)`，`k` 默认 5，raw 是加权和。校准参照：只命中 1 个 must 术语（标题+摘要）≈72 分，只在摘要命中 ≈42 分，命中 2 个 ≈84 分。
+
+两个匹配细节会影响召回率，改词表时注意：
+
+- **容忍复数**：词表写 `species distribution model`，正文里的 `models` 也会命中
+- **容忍英美拼写**：`modelling` ≡ `modeling`
+- **重叠去重**：`species distribution model` 命中后，`distribution model` 不会重复加分
+
+摘要缺失（<120 字符）的文献会被压到阈值以下，避免「零信息」条目混进来；开启 LLM 后由模型按标题判断。
 
 ---
 
@@ -261,7 +263,14 @@ Secret 名字必须是 `LLM_API_KEY`；换供应商时记得同时改 `LLM_BASE_
 OpenAlex 匿名搜索在高峰期会被限流。申请一个免费 API key 填进 `OPENALEX_API_KEY` 基本就没了。没 key 时程序会自动熔断、全部改走 Crossref，结果质量略降但不断供。
 
 **Q：某本期刊一篇都抓不到**
-先确认 ISSN 写对（印刷版|电子版）。再确认这本刊在 OpenAlex 里有没有被收录（去 openalex.org 搜一次）。还不行就改用 PubMed 检索式，前提是该刊被 PubMed 索引。
+九成是 RSS 地址的格式问题，按这个顺序查：
+1. Wiley 的 ISSN **要去掉连字符**（`14610248` 而不是 `1461-0248`）
+2. BES / ESA 的刊在 `besjournals.` / `esajournals.` 子域下，不是 `onlinelibrary.`
+3. Cell Press 必须用 `inpress.rss`，用 `/rss` 会 403
+4. Springer 用 `search.rss?facet-journal-id={ID}`，`/journal/{id}/rss` 已经失效
+5. 在浏览器里直接打开那个 RSS 地址，能看到 XML 才算对；ScienceDirect 和 MDPI 对程序请求返回 403，无解
+
+如果 RSS 本身正常但入库为 0，看 Actions 日志里该源的篇数：篇数正常说明被阈值或时间窗过滤了，把 `lookback_days` 调大写再试。
 
 **Q：想加「只看某个作者」**
 在 `feeds.yml` 用 PubMed：`term: 'Smith JA[au] AND "species distribution"[tiab]'`，或 OpenAlex 的 `author.id`。后者需要先去 openalex.org 查作者 ID。

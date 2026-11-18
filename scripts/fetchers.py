@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 import time
 import xml.etree.ElementTree as ET
 from typing import Any
@@ -26,6 +27,17 @@ from common import (
 OPENALEX_URL = "https://api.openalex.org/works"
 PUBMED_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 CROSSREF_URL = "https://api.crossref.org/works"
+
+# 期刊 feed 里混进来的非论文条目（版权页、封面、勘误等），直接丢弃
+_JUNK_TITLE = re.compile(
+    r"^\s*(issue information|cover image|front cover|back cover|inside front cover|"
+    r"table of contents|contents|editorial board|advisory board|in this issue|"
+    r"masthead|index|author index|subject index|volume index|"
+    r"correction|corrigendum|erratum|retraction|retracted|expression of concern|"
+    r"book review|books received|list of reviewers|reviewers for|announcement|"
+    r"call for papers|front matter|back matter|issue highlights)\b",
+    re.I,
+)
 
 # OpenAlex 里明显不是研究论文的类型，直接丢弃
 _SKIP_OPENALEX_TYPES = {"paratext", "peer-review", "editorial", "erratum", "other", "libguides"}
@@ -59,7 +71,7 @@ def build_item(
     source_group: str,
 ) -> dict[str, Any] | None:
     title = clean_title(title)
-    if len(title) < 8:
+    if len(title) < 8 or _JUNK_TITLE.match(title):
         return None
     doi = normalize_doi(doi)
     abstract = clean_abstract(abstract)

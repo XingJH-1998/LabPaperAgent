@@ -38,15 +38,24 @@ GENERIC_TERMS = {
 
 
 def _term_regex(term: str) -> re.Pattern:
+    """术语转正则。三点讲究：
+    - 词间允许空格/连字符混用（"species-distribution model" 也算）
+    - 容忍复数后缀（词表写 model，正文里的 models 也要算命中）
+    - 容忍美式/英式拼写差异（modelling ≡ modeling）
+    """
     parts = [re.escape(p) for p in re.split(r"[\s\-]+", term.strip()) if p]
     body = r"[\s\-]+".join(parts)
-    return re.compile(rf"\b{body}\b", re.IGNORECASE)
+    body = body.replace("ll", "l+")  # modelling / modeling
+    return re.compile(rf"\b{body}(?:s|es)?\b", re.IGNORECASE)
 
 
 class KeywordScorer:
     """无需 API 的兜底打分器；同时用于挑选最值得送去 LLM 的文献。"""
 
     def __init__(self, lab_cfg: dict) -> None:
+        self.no_abstract_cap = float((lab_cfg.get("scoring") or {}).get("min_score", 55)) - 5
+        # 饱和系数：score = 100*raw/(raw+k)。k 越小越容易拿高分，需要按实际数据校准
+        self.k = float((lab_cfg.get("scoring") or {}).get("k", 14.0))
         lex = lab_cfg.get("lexicon") or {}
         self.must = [(t, _term_regex(t)) for t in lex.get("must") or []]
         self.soft = [(t, _term_regex(t)) for t in lex.get("soft") or []]
@@ -62,7 +71,19 @@ class KeywordScorer:
                     continue
                 self.interest.append((t, label, _term_regex(t)))
 
+    def raw_score(self, item: dict) -> tuple[float, list[str], list[str]]:
+        """返回加权原始分与命中词，便于外部做校准/调参。"""
+        return self._raw(item)
+
     def score(self, item: dict) -> tuple[float, list[str], list[str]]:
+        raw, matched, labels = self._raw(item)
+        abstract = item.get("abstract") or ""
+        score = 100.0 * raw / (raw + self.k) if raw else 0.0
+        if len(abstract) < 120:
+            score = min(score, self.no_abstract_cap)
+        return round(score, 1), matched, labels
+
+    def _raw(self, item: dict) -> tuple[float, list[str], list[str]]:
         title = item.get("title") or ""
         abstract = item.get("abstract") or ""
         hay_abs = f"{title} {abstract}"  # 标题也计入摘要层，避免标题命中漏加
@@ -70,8 +91,12 @@ class KeywordScorer:
         raw = 0.0
         matched: list[str] = []
         labels: list[str] = []
+        covered: list[str] = []  # 已计分的术语，供去重
 
-        for term, rx in self.must:
+        # 先匹配更长的术语，避免 "niche model" 被 "ecological niche model" 重复计数
+        for term, rx in sorted(self.must, key=lambda x: -len(x[0])):
+            if any(term.lower() in c for c in covered):
+                continue
             w = 0.0
             if rx.search(title):
                 w += W_MUST_TITLE
@@ -82,8 +107,13 @@ class KeywordScorer:
                     w *= 0.6
                 raw += w
                 matched.append(term)
+                covered.append(term.lower())
 
+        # 已被更长术语覆盖的短语不再重复计分（"distribution model" 被
+        # "species distribution model" 包含时跳过）
         for term, rx in self.soft:
+            if any(term.lower() in c for c in covered):
+                continue
             w = 0.0
             if rx.search(title):
                 w += W_SOFT_TITLE
@@ -92,8 +122,11 @@ class KeywordScorer:
             if w:
                 raw += w
                 matched.append(term)
+                covered.append(term.lower())
 
         for term, label, rx in self.interest:
+            if any(term.lower() in c for c in covered):
+                continue
             if rx.search(hay_abs):
                 raw += W_INTEREST * 0.8
                 matched.append(term)
@@ -113,16 +146,12 @@ class KeywordScorer:
                 raw += W_EXCLUDE
 
         raw = max(0.0, raw)
-        score = 100.0 * raw / (raw + 14.0) if raw else 0.0
-        # 摘要缺失的文献不该拿高分（信息不足）
-        if len(abstract) < 120:
-            score = min(score, 55.0)
 
         seen: list[str] = []
         for m in matched:
             if m not in seen:
                 seen.append(m)
-        return round(score, 1), seen[:6], list(dict.fromkeys(labels))[:3]
+        return raw, seen[:6], list(dict.fromkeys(labels))[:3]
 
 
 # ---------------------------------------------------------------------------

@@ -89,7 +89,22 @@ def clean_abstract(text: str | None) -> str:
     t = re.sub(r"^[A-Z][A-Za-z&\s\-\.]{3,60},\s*Published online:[^\.]*\.\s*", "", t)
     t = re.sub(r"\s*doi:\s*10\.\d{4,9}/\S+\s*$", "", t, flags=re.I)
     t = re.sub(r"^\s*doi:\s*10\.\d{4,9}/\S+\s*", "", t, flags=re.I)
-    return norm_space(t)
+    t = norm_space(t)
+    # 有的出版社（如 Frontiers）把结构式摘要的小标题和正文粘在一起：
+    # "IntroductionHabitat degradation ... assessment.MethodsUsing ..."
+    # 这里把常见小标题前后补回空格，纯为可读性。
+    t = re.sub(
+        r"(?:(?<=[a-z\.\)])|^)(Introduction|Background|Methods|Materials and Methods|"
+        r"Results|Discussion|Conclusions?|Aims?|Objectives?|Significance|Highlights)(?=[A-Z])",
+        r" \1 ",
+        t,
+    )
+    t = norm_space(t)
+    # Wiley 的 TOC description 只是「刊名, Volume 29, Issue 11, November 2026.」
+    # 或「刊名, EarlyView.」，不是摘要。留着会污染摘要字段。
+    if len(t) < 160 and re.match(r"^[^,]{2,80},\s*(Volume|Issue|EarlyView|Early View)\b", t, re.I):
+        return ""
+    return t
 
 
 def clean_title(text: str | None) -> str:

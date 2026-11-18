@@ -1,232 +1,355 @@
 # ============================================================================
-#  Feeds · 订阅源
+#  Feeds · 期刊订阅源（纯期刊 RSS，没有关键词检索）
 #  ---------------------------------------------------------------------------
-#  一个 feed 就是一条「订阅」。四类支持的类型：
+#  每天的推送 100% 来自你在这个文件里列出的期刊。
+#  加一本刊 = 复制一段，改 id / name / url 三个字段。
 #
-#   openalex  免费、免 key，覆盖全部生态学期刊 + 摘要，最推荐用于关键词监控
-#             query: 单个检索词 或 queries: [多个检索词]（逐个跑再合并去重）
-#             issn:  期刊 ISSN，用 | 连接印刷版|电子版，用于「期刊 TOC」订阅
-#   pubmed    NCBI E-utilities（PubMed 官方 RSS 已于 2022 年停用，这是等效方案）
-#             term:   PubMed 检索式，语法同 PubMed 搜索框
-#   rss       任意 RSS/Atom 地址（bioRxiv、Nature、arXiv、期刊官方 feed…）
-#   crossref  仅作为 openalex 限流时的备用通道，一般不用手写
+#  ⚠️ 各出版社的 RSS 路径规则不一样，踩过坑记在这里：
 #
-#  所有 feed 都支持：enabled / lookback_days / max_items / group
-#  group 决定网页上的来源筛选分组，可自定义。
+#   Wiley      https://onlinelibrary.wiley.com/feed/{ISSN}/most-recent
+#              ⚠️ ISSN 必须去掉连字符！14610248 ✅   1461-0248 ❌(404)
+#              BES 的刊走 besjournals.onlinelibrary.wiley.com/feed/{ISSN}/most-recent
+#              ESA 的刊走 esajournals.onlinelibrary.wiley.com/feed/{ISSN}/most-recent
+#              Wiley 的 feed 只有标题+卷期，没有摘要 —— 抓下来后会自动去
+#              OpenAlex / Crossref 回填（实测命中率 95%）
+#
+#   Nature     https://www.nature.com/{刊名缩写}.rss        例：natecolevol.rss
+#   Cell Press https://www.cell.com/{刊路径}/inpress.rss    例：trends/ecology-evolution/inpress.rss
+#              ⚠️ 用 /rss 会 403，必须用 inpress.rss
+#   Springer   https://link.springer.com/search.rss?facet-journal-id={期刊ID}
+#              ⚠️ /journal/{id}/rss 已失效。期刊 ID 看文章 URL 里的数字
+#   bioRxiv    https://connect.biorxiv.org/biorxiv_xml.php?subject={学科}
+#   arXiv      https://rss.arxiv.org/rss/{分类}
+#   Pensoft    https://{刊名}.pensoft.net/rss.php
+#
+#   已确认不可用（别浪费时间）：ScienceDirect(403)、MDPI(403)、
+#   Wiley 旧格式 /feed/1461-0248/... (必须无连字符)、Springer /journal/{id}/rss
+#
+#  所有条目都支持：enabled / lookback_days / max_items / group
+#  lookback_days 只影响「多久以前的算新」，RSS 本身只给最近若干篇。
 # ============================================================================
 
 defaults:
   enabled: true
-  lookback_days: 14
+  lookback_days: 30
   max_items: 40
 
 feeds:
-  # ---------------------------------------------------------------- 关键词监控
-  - id: oa-sdm
-    group: "关键词监控"
-    name: "SDM / 生态位模型 方法"
-    type: openalex
-    queries:
-      - "species distribution model"
-      - "ecological niche model"
-      - "habitat suitability model"
-      - "species distribution modelling"
-    lookback_days: 14
-    max_items: 60
+  # ==========================================================================
+  #  生态学核心刊（ESA / BES 系）
+  # ==========================================================================
+  - id: rss-ecollett
+    group: "生态学核心"
+    name: "Ecology Letters"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/14610248/most-recent"
+    max_items: 30
 
-  - id: oa-invasion
-    group: "关键词监控"
-    name: "入侵生物分布"
-    type: openalex
-    queries:
-      - "invasive species distribution"
-      - "biological invasion risk"
-      - "invasive alien species spread"
-      - "niche conservatism invasion"
-    lookback_days: 14
-    max_items: 60
-
-  - id: oa-climate
-    group: "关键词监控"
-    name: "气候变化与分布变动"
-    type: openalex
-    queries:
-      - "climate change range shift"
-      - "species distribution climate change"
-      - "climatic niche shift"
-    lookback_days: 14
-    max_items: 50
-
-  - id: oa-methods
-    group: "关键词监控"
-    name: "模型评估 / 迁移性 / 不确定性"
-    type: openalex
-    queries:
-      - "species distribution model transferability"
-      - "species distribution model evaluation uncertainty"
-      - "ensemble species distribution model"
-    lookback_days: 21
+  - id: rss-ecology
+    group: "生态学核心"
+    name: "Ecology"
+    type: rss
+    url: "https://esajournals.onlinelibrary.wiley.com/feed/19399170/most-recent"
     max_items: 40
 
-  # ---------------------------------------------------------------- 期刊 TOC
-  # 用 ISSN 订阅整刊目录：这些生态学核心刊大多不在 PubMed，也没有可用 RSS。
-  # 加新刊：去期刊主页查 ISSN，写成 "印刷版|电子版"。
-  #
-  # lookback_days 给到 45 天是有意的：不少刊的「发表日期」是纸本期次（例如
-  # 2026-10-01），文章实际 11 月中才上线。窗口太窄会漏掉刚见刊的文章。
-  # 期间不会重复推送——data/state.json 会记住已处理过的文献。
-  - id: toc-ecography
-    group: "期刊 TOC"
-    name: "Ecography"
-    type: openalex
-    issn: "0906-7590|1600-0587"
-    lookback_days: 45
-    max_items: 25
-
-  - id: toc-jecol
-    group: "期刊 TOC"
-    name: "Journal of Ecology"
-    type: openalex
-    issn: "0022-0477|1365-2745"
-    lookback_days: 45
-    max_items: 25
-
-  - id: toc-jbiogeo
-    group: "期刊 TOC"
-    name: "Journal of Biogeography"
-    type: openalex
-    issn: "0305-0270|1365-2699"
-    lookback_days: 45
-    max_items: 25
-
-  - id: toc-ddi
-    group: "期刊 TOC"
-    name: "Diversity and Distributions"
-    type: openalex
-    issn: "1366-9516|1472-4642"
-    lookback_days: 45
-    max_items: 25
-
-  - id: toc-geb
-    group: "期刊 TOC"
-    name: "Global Ecology and Biogeography"
-    type: openalex
-    issn: "1466-822X|1466-8238"
-    lookback_days: 45
-    max_items: 25
-
-  - id: toc-ecolett
-    group: "期刊 TOC"
-    name: "Ecology Letters"
-    type: openalex
-    issn: "1461-023X|1461-0248"
-    lookback_days: 45
-    max_items: 25
-
-  - id: toc-gcb
-    group: "期刊 TOC"
-    name: "Global Change Biology"
-    type: openalex
-    issn: "1354-1013|1365-2486"
-    lookback_days: 45
-    max_items: 25
-
-  - id: toc-biolinvasions
-    group: "期刊 TOC"
-    name: "Biological Invasions"
-    type: openalex
-    issn: "1387-3547|1573-1464"
-    lookback_days: 45
-    max_items: 25
-
-  - id: toc-tree
-    group: "期刊 TOC"
-    name: "Trends in Ecology & Evolution"
-    type: openalex
-    issn: "0169-5347"
-    lookback_days: 45
+  - id: rss-ecolmono
+    group: "生态学核心"
+    name: "Ecological Monographs"
+    type: rss
+    url: "https://esajournals.onlinelibrary.wiley.com/feed/15577015/most-recent"
     max_items: 20
 
-  - id: toc-natecolevol
-    group: "期刊 TOC"
-    name: "Nature Ecology & Evolution"
-    type: openalex
-    issn: "2397-334X"
-    lookback_days: 45
-    max_items: 20
-
-  - id: toc-ecolappl
-    group: "期刊 TOC"
+  - id: rss-ecolappl
+    group: "生态学核心"
     name: "Ecological Applications"
-    type: openalex
-    issn: "1051-0761|1939-5582"
-    lookback_days: 45
-    max_items: 20
+    type: rss
+    url: "https://esajournals.onlinelibrary.wiley.com/feed/19395582/most-recent"
+    max_items: 40
 
-  - id: toc-jappecol
-    group: "期刊 TOC"
+  - id: rss-jecol
+    group: "生态学核心"
+    name: "Journal of Ecology"
+    type: rss
+    url: "https://besjournals.onlinelibrary.wiley.com/feed/13652745/most-recent"
+    max_items: 30
+
+  - id: rss-jappecol
+    group: "生态学核心"
     name: "Journal of Applied Ecology"
-    type: openalex
-    issn: "0021-8901|1365-2664"
-    lookback_days: 45
-    max_items: 20
+    type: rss
+    url: "https://besjournals.onlinelibrary.wiley.com/feed/13652664/most-recent"
+    max_items: 30
 
-  - id: toc-lscape
-    group: "期刊 TOC"
-    name: "Landscape Ecology"
-    type: openalex
-    issn: "0921-2973|1572-9761"
-    lookback_days: 45
-    max_items: 20
-
-  - id: toc-mee
-    group: "期刊 TOC"
+  - id: rss-mee
+    group: "生态学核心"
     name: "Methods in Ecology and Evolution"
-    type: openalex
-    issn: "2041-210X"
-    lookback_days: 45
-    max_items: 20
+    type: rss
+    url: "https://besjournals.onlinelibrary.wiley.com/feed/2041210X/most-recent"
+    max_items: 40
 
-  # ---------------------------------------------------------------- 预印本
-  - id: biorxiv-ecology
+  # ==========================================================================
+  #  全球变化与生物地理
+  # ==========================================================================
+  - id: rss-gcb
+    group: "全球变化与生物地理"
+    name: "Global Change Biology"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/13652486/most-recent"
+    max_items: 40
+
+  - id: rss-geb
+    group: "全球变化与生物地理"
+    name: "Global Ecology and Biogeography"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/14668238/most-recent"
+    max_items: 30
+
+  - id: rss-jbiogeo
+    group: "全球变化与生物地理"
+    name: "Journal of Biogeography"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/13652699/most-recent"
+    max_items: 30
+
+  - id: rss-ddi
+    group: "全球变化与生物地理"
+    name: "Diversity and Distributions"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/14724642/most-recent"
+    max_items: 30
+
+  - id: rss-ecography
+    group: "全球变化与生物地理"
+    name: "Ecography"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/16000587/most-recent"
+    max_items: 40
+
+  - id: rss-nclimate
+    group: "全球变化与生物地理"
+    name: "Nature Climate Change"
+    type: rss
+    url: "https://www.nature.com/nclimate.rss"
+    # Nature 的 feed 只给最近 8 篇，窗口放宽防止周末停更时被全部滤掉
+    lookback_days: 45
+    max_items: 30
+
+  # ==========================================================================
+  #  入侵生物与保护
+  # ==========================================================================
+  - id: rss-biolinvasions
+    group: "入侵与保护"
+    name: "Biological Invasions"
+    type: rss
+    url: "https://link.springer.com/search.rss?facet-journal-id=10530"
+    max_items: 30
+
+  - id: rss-neobiota
+    group: "入侵与保护"
+    name: "NeoBiota"
+    type: rss
+    url: "https://neobiota.pensoft.net/rss.php"
+    max_items: 40
+
+  - id: rss-consbiol
+    group: "入侵与保护"
+    name: "Conservation Biology"
+    type: rss
+    url: "https://conbio.onlinelibrary.wiley.com/feed/15231739/most-recent"
+    max_items: 40
+
+  - id: rss-lscape
+    group: "入侵与保护"
+    name: "Landscape Ecology"
+    type: rss
+    url: "https://link.springer.com/search.rss?facet-journal-id=10980"
+    max_items: 30
+
+  - id: rss-biodivcons
+    group: "入侵与保护"
+    name: "Biodiversity and Conservation"
+    type: rss
+    url: "https://link.springer.com/search.rss?facet-journal-id=10531"
+    max_items: 30
+
+  # ==========================================================================
+  #  综合与交叉
+  # ==========================================================================
+  - id: rss-natecolevol
+    group: "综合与交叉"
+    name: "Nature Ecology & Evolution"
+    type: rss
+    url: "https://www.nature.com/natecolevol.rss"
+    lookback_days: 45
+    max_items: 30
+
+  - id: rss-tree
+    group: "综合与交叉"
+    name: "Trends in Ecology & Evolution"
+    type: rss
+    url: "https://www.cell.com/trends/ecology-evolution/inpress.rss"
+    max_items: 30
+
+  - id: rss-frontiers
+    group: "综合与交叉"
+    name: "Frontiers in Ecology and Evolution"
+    type: rss
+    url: "https://www.frontiersin.org/journals/ecology-and-evolution/rss"
+    max_items: 40
+
+  - id: rss-ecolsoc
+    group: "综合与交叉"
+    name: "Ecology and Society"
+    type: rss
+    url: "https://www.ecologyandsociety.org/rss/"
+    lookback_days: 45
+    max_items: 30
+
+  - id: rss-oecologia
+    group: "综合与交叉"
+    name: "Oecologia"
+    type: rss
+    url: "https://link.springer.com/search.rss?facet-journal-id=442"
+    max_items: 30
+
+  # ==========================================================================
+  #  预印本
+  # ==========================================================================
+  - id: rss-biorxiv-ecology
     group: "预印本"
     name: "bioRxiv · Ecology"
     type: rss
     url: "https://connect.biorxiv.org/biorxiv_xml.php?subject=ecology"
-    # 离线时 feed 里只有最近若干篇，lookback 给宽一点免得全被过滤
-    lookback_days: 30
+    lookback_days: 20
     max_items: 50
 
-  # ---------------------------------------------------------------- PubMed
-  # PubMed 官方「检索式 RSS」已停用，这里用 E-utilities 做等效订阅。
-  # PubMed 对纯生态刊覆盖有限，但生态学相关的这几本刊 + 跨领域检索很好用。
-  - id: pubmed-ecology
-    group: "PubMed"
-    name: "PubMed · 生态学核心刊"
-    type: pubmed
-    term: >
-      ("Ecology"[ta] OR "Ecol Lett"[ta] OR "Glob Chang Biol"[ta] OR
-       "Trends Ecol Evol"[ta] OR "Nat Ecol Evol"[ta] OR "Conserv Biol"[ta] OR
-       "Proc Biol Sci"[ta] OR "Ecol Appl"[ta])
-    lookback_days: 14
+  # ==========================================================================
+  #  以下默认关闭：需要就改 enabled: true
+  # ==========================================================================
+  - id: rss-janimalecol
+    group: "生态学核心"
+    name: "Journal of Animal Ecology"
+    type: rss
+    url: "https://besjournals.onlinelibrary.wiley.com/feed/13652656/most-recent"
+    enabled: false
     max_items: 40
 
-  - id: pubmed-sdm
-    group: "PubMed"
-    name: "PubMed · 分布模型检索式"
-    type: pubmed
-    term: >
-      ("species distribution model*"[tiab] OR "ecological niche model*"[tiab] OR
-       "habitat suitability model*"[tiab] OR "distribution modelling"[tiab])
-    lookback_days: 30
+  - id: rss-funcecol
+    group: "生态学核心"
+    name: "Functional Ecology"
+    type: rss
+    url: "https://besjournals.onlinelibrary.wiley.com/feed/13652435/most-recent"
+    enabled: false
     max_items: 40
 
-  # arXiv 生态/进化方向，量少，默认关闭；需要时把 enabled 改成 true
-  - id: arxiv-qbio
+  - id: rss-conlett
+    group: "入侵与保护"
+    name: "Conservation Letters"
+    type: rss
+    url: "https://conbio.onlinelibrary.wiley.com/feed/1755263X/most-recent"
+    enabled: false
+    max_items: 20
+
+  - id: rss-people-nature
+    group: "综合与交叉"
+    name: "People and Nature"
+    type: rss
+    url: "https://besjournals.onlinelibrary.wiley.com/feed/25758314/most-recent"
+    enabled: false
+    max_items: 40
+
+  - id: rss-ecolevol
+    group: "生态学核心"
+    name: "Ecology and Evolution"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/20457758/most-recent"
+    enabled: false
+    max_items: 40
+
+  - id: rss-restoration
+    group: "入侵与保护"
+    name: "Restoration Ecology"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/1526100X/most-recent"
+    enabled: false
+    max_items: 40
+
+  - id: rss-rsec
+    group: "生态学核心"
+    name: "Remote Sensing in Ecology and Conservation"
+    type: rss
+    url: "https://zslpublications.onlinelibrary.wiley.com/feed/20563485/most-recent"
+    enabled: false
+    max_items: 30
+
+  - id: rss-jvs
+    group: "生态学核心"
+    name: "Journal of Vegetation Science"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/16541103/most-recent"
+    enabled: false
+    max_items: 20
+
+  - id: rss-avs
+    group: "生态学核心"
+    name: "Applied Vegetation Science"
+    type: rss
+    url: "https://onlinelibrary.wiley.com/feed/1654109X/most-recent"
+    enabled: false
+    max_items: 20
+
+  - id: rss-plantecl
+    group: "综合与交叉"
+    name: "Plant Ecology"
+    type: rss
+    url: "https://link.springer.com/search.rss?facet-journal-id=11258"
+    enabled: false
+    max_items: 20
+
+  - id: rss-nature
+    group: "综合与交叉"
+    name: "Nature"
+    type: rss
+    url: "https://www.nature.com/nature.rss"
+    enabled: false
+    max_items: 80
+
+  - id: rss-ncomms
+    group: "综合与交叉"
+    name: "Nature Communications"
+    type: rss
+    url: "https://www.nature.com/ncomms.rss"
+    enabled: false
+    max_items: 40
+
+  - id: rss-science
+    group: "综合与交叉"
+    name: "Science"
+    type: rss
+    url: "https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=science"
+    enabled: false
+    max_items: 60
+
+  - id: rss-pnas
+    group: "综合与交叉"
+    name: "PNAS"
+    type: rss
+    url: "https://www.pnas.org/action/showFeed?type=etoc&feed=rss&jc=pnas"
+    enabled: false
+    max_items: 60
+
+  - id: rss-biorxiv-evol
+    group: "预印本"
+    name: "bioRxiv · Evolutionary Biology"
+    type: rss
+    url: "https://connect.biorxiv.org/biorxiv_xml.php?subject=evolutionary_biology"
+    enabled: false
+    max_items: 50
+
+  - id: rss-arxiv-qbio
     group: "预印本"
     name: "arXiv · q-bio.PE"
     type: rss
     url: "https://rss.arxiv.org/rss/q-bio.PE"
     enabled: false
-    lookback_days: 14
     max_items: 30

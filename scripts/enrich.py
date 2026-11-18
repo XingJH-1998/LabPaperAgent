@@ -48,7 +48,7 @@ def _abstract_from_inverted(inv: dict | None) -> str:
 
 
 class Enricher:
-    def __init__(self, min_abstract_chars: int = 120, max_lookups: int = 200, workers: int = 5) -> None:
+    def __init__(self, min_abstract_chars: int = 120, max_lookups: int = 400, workers: int = 5) -> None:
         self.min_chars = min_abstract_chars
         self.max_lookups = max_lookups
         self.workers = workers
@@ -61,13 +61,18 @@ class Enricher:
     def needs(self, item: dict) -> bool:
         return len(item.get("abstract") or "") < self.min_chars
 
+    def missing_any(self, item: dict) -> bool:
+        """缺摘要，或缺作者（Springer 的 feed 不带作者）。"""
+        return self.needs(item) or not (item.get("authors") or [])
+
     def enrich(self, items: list[dict]) -> list[dict]:
-        todo = [i for i in items if self.needs(i) and i.get("doi")]
+        todo = [i for i in items if self.missing_any(i) and i.get("doi")]
         if not todo:
             return items
-        todo.sort(key=lambda i: len(i.get("abstract") or ""))
+        # 又缺摘要又缺作者的排最前
+        todo.sort(key=lambda i: (bool(i.get("authors")), len(i.get("abstract") or "")))
         todo = todo[: self.max_lookups]
-        log(f"摘要回填：{len(todo)} 篇缺摘要（共 {len(items)} 篇候选）")
+        log(f"字段回填：{len(todo)} 篇缺摘要或缺作者（共 {len(items)} 篇候选）")
 
         by_doi: dict[str, dict] = {}
         for it in todo:
@@ -98,6 +103,8 @@ class Enricher:
                     item["abstract_source"] = meta.get("via", "")
                     with _lock:
                         self.filled += 1
+                if not (item.get("authors") or []) and meta.get("authors"):
+                    item["authors"] = meta["authors"][:12]
                 for key in ("journal", "date"):
                     if not item.get(key) and meta.get(key):
                         item[key] = meta[key]
@@ -105,11 +112,13 @@ class Enricher:
                     log(f"  回填进度 {done}/{len(by_doi)}，已补 {self.filled} 篇")
 
         detail = "、".join(f"{k} {v}" for k, v in sorted(self.sources_used.items(), key=lambda kv: -kv[1]))
-        log(f"摘要回填完成：补齐 {self.filled} 篇/{len(todo)} 篇" + (f"（{detail}）" if detail else ""))
+        log(f"字段回填完成：补摘要 {self.filled} 篇/{len(todo)} 篇" + (f"（{detail}）" if detail else ""))
         return items
 
     # ------------------------------------------------------------------
     def _lookup(self, doi: str) -> dict | None:
+        """逐级回退，顺便把作者也补齐（有的源只有摘要没有作者）。"""
+        acc: dict = {}
         for fn, name in (
             (self._from_openalex, "openalex"),
             (self._from_crossref, "crossref"),
@@ -117,17 +126,23 @@ class Enricher:
             (self._from_s2, "semantic_scholar"),
         ):
             try:
-                meta = fn(doi)
+                got = fn(doi) or {}
             except Exception:
-                meta = None
-            if meta and meta.get("abstract"):
-                meta["via"] = name
-                return meta
-            if meta and not meta.get("abstract"):
+                got = {}
+            if not got:
                 continue
-        return None
+            if got.get("abstract") and not acc.get("abstract"):
+                acc["abstract"] = got["abstract"]
+                acc["via"] = name
+            if got.get("authors") and not acc.get("authors"):
+                acc["authors"] = got["authors"]
+            for key in ("journal", "date"):
+                if got.get(key) and not acc.get(key):
+                    acc[key] = got[key]
+            if acc.get("abstract") and acc.get("authors"):
+                break
+        return acc or None
 
-    # ------------------------------------------------------------------
     def _from_openalex(self, doi: str) -> dict | None:
         try:
             r = _session().get(
@@ -143,10 +158,15 @@ class Enricher:
             return None
         src = ((w.get("primary_location") or {}).get("source") or {}) or {}
         date = parse_date(w.get("publication_date"))
+        authors = [
+            (a.get("author") or {}).get("display_name", "")
+            for a in (w.get("authorships") or [])[:12]
+        ]
         return {
             "abstract": clean_abstract(_abstract_from_inverted(w.get("abstract_inverted_index"))),
             "journal": src.get("display_name") or "",
             "date": date.isoformat() if date else "",
+            "authors": [a for a in authors if a],
         }
 
     def _from_crossref(self, doi: str) -> dict | None:
@@ -161,10 +181,16 @@ class Enricher:
         except ValueError:
             return None
         date = parse_date(msg.get("published") or msg.get("issued"))
+        authors = []
+        for a in (msg.get("author") or [])[:12]:
+            name = " ".join(x for x in [a.get("given", ""), a.get("family", "")] if x).strip()
+            if name:
+                authors.append(name)
         return {
             "abstract": clean_abstract(msg.get("abstract") or ""),
             "journal": (msg.get("container-title") or [""])[0] or "",
             "date": date.isoformat() if date else "",
+            "authors": authors,
         }
 
     def _from_europepmc(self, doi: str) -> dict | None:

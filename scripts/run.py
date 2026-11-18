@@ -23,7 +23,7 @@ import store  # noqa: E402
 from common import load_config, log, today_utc, warn  # noqa: E402
 from enrich import Enricher  # noqa: E402
 from fetchers import fetch_all  # noqa: E402
-from scoring import score_all  # noqa: E402
+from scoring import KeywordScorer, score_all  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -112,8 +112,14 @@ def main() -> int:
         _finish_outputs(lab_cfg, feeds_cfg, today, [], {"fetched": fetched, "new": 0, "kept": 0}, args)
         return 0
 
-    # ---------------------------------------------------------------- 摘要回填
-    enricher = Enricher(min_abstract_chars=int(scoring_cfg.get("min_abstract_chars", 120)))
+    # ---------------------------------------------------------------- 字段回填
+    # 回填有次数上限，先按标题关键词分排序，让最可能相关的文献优先拿到摘要
+    kw = KeywordScorer(lab_cfg)
+    new_items.sort(key=lambda it: -kw.raw_score(it)[0])
+    enricher = Enricher(
+        min_abstract_chars=int(scoring_cfg.get("min_abstract_chars", 120)),
+        max_lookups=int(scoring_cfg.get("max_enrich", 400)),
+    )
     new_items = enricher.enrich(new_items)
 
     # ---------------------------------------------------------------- 打分
