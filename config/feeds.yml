@@ -1,0 +1,232 @@
+# ============================================================================
+#  Feeds · 订阅源
+#  ---------------------------------------------------------------------------
+#  一个 feed 就是一条「订阅」。四类支持的类型：
+#
+#   openalex  免费、免 key，覆盖全部生态学期刊 + 摘要，最推荐用于关键词监控
+#             query: 单个检索词 或 queries: [多个检索词]（逐个跑再合并去重）
+#             issn:  期刊 ISSN，用 | 连接印刷版|电子版，用于「期刊 TOC」订阅
+#   pubmed    NCBI E-utilities（PubMed 官方 RSS 已于 2022 年停用，这是等效方案）
+#             term:   PubMed 检索式，语法同 PubMed 搜索框
+#   rss       任意 RSS/Atom 地址（bioRxiv、Nature、arXiv、期刊官方 feed…）
+#   crossref  仅作为 openalex 限流时的备用通道，一般不用手写
+#
+#  所有 feed 都支持：enabled / lookback_days / max_items / group
+#  group 决定网页上的来源筛选分组，可自定义。
+# ============================================================================
+
+defaults:
+  enabled: true
+  lookback_days: 14
+  max_items: 40
+
+feeds:
+  # ---------------------------------------------------------------- 关键词监控
+  - id: oa-sdm
+    group: "关键词监控"
+    name: "SDM / 生态位模型 方法"
+    type: openalex
+    queries:
+      - "species distribution model"
+      - "ecological niche model"
+      - "habitat suitability model"
+      - "species distribution modelling"
+    lookback_days: 14
+    max_items: 60
+
+  - id: oa-invasion
+    group: "关键词监控"
+    name: "入侵生物分布"
+    type: openalex
+    queries:
+      - "invasive species distribution"
+      - "biological invasion risk"
+      - "invasive alien species spread"
+      - "niche conservatism invasion"
+    lookback_days: 14
+    max_items: 60
+
+  - id: oa-climate
+    group: "关键词监控"
+    name: "气候变化与分布变动"
+    type: openalex
+    queries:
+      - "climate change range shift"
+      - "species distribution climate change"
+      - "climatic niche shift"
+    lookback_days: 14
+    max_items: 50
+
+  - id: oa-methods
+    group: "关键词监控"
+    name: "模型评估 / 迁移性 / 不确定性"
+    type: openalex
+    queries:
+      - "species distribution model transferability"
+      - "species distribution model evaluation uncertainty"
+      - "ensemble species distribution model"
+    lookback_days: 21
+    max_items: 40
+
+  # ---------------------------------------------------------------- 期刊 TOC
+  # 用 ISSN 订阅整刊目录：这些生态学核心刊大多不在 PubMed，也没有可用 RSS。
+  # 加新刊：去期刊主页查 ISSN，写成 "印刷版|电子版"。
+  #
+  # lookback_days 给到 45 天是有意的：不少刊的「发表日期」是纸本期次（例如
+  # 2026-10-01），文章实际 11 月中才上线。窗口太窄会漏掉刚见刊的文章。
+  # 期间不会重复推送——data/state.json 会记住已处理过的文献。
+  - id: toc-ecography
+    group: "期刊 TOC"
+    name: "Ecography"
+    type: openalex
+    issn: "0906-7590|1600-0587"
+    lookback_days: 45
+    max_items: 25
+
+  - id: toc-jecol
+    group: "期刊 TOC"
+    name: "Journal of Ecology"
+    type: openalex
+    issn: "0022-0477|1365-2745"
+    lookback_days: 45
+    max_items: 25
+
+  - id: toc-jbiogeo
+    group: "期刊 TOC"
+    name: "Journal of Biogeography"
+    type: openalex
+    issn: "0305-0270|1365-2699"
+    lookback_days: 45
+    max_items: 25
+
+  - id: toc-ddi
+    group: "期刊 TOC"
+    name: "Diversity and Distributions"
+    type: openalex
+    issn: "1366-9516|1472-4642"
+    lookback_days: 45
+    max_items: 25
+
+  - id: toc-geb
+    group: "期刊 TOC"
+    name: "Global Ecology and Biogeography"
+    type: openalex
+    issn: "1466-822X|1466-8238"
+    lookback_days: 45
+    max_items: 25
+
+  - id: toc-ecolett
+    group: "期刊 TOC"
+    name: "Ecology Letters"
+    type: openalex
+    issn: "1461-023X|1461-0248"
+    lookback_days: 45
+    max_items: 25
+
+  - id: toc-gcb
+    group: "期刊 TOC"
+    name: "Global Change Biology"
+    type: openalex
+    issn: "1354-1013|1365-2486"
+    lookback_days: 45
+    max_items: 25
+
+  - id: toc-biolinvasions
+    group: "期刊 TOC"
+    name: "Biological Invasions"
+    type: openalex
+    issn: "1387-3547|1573-1464"
+    lookback_days: 45
+    max_items: 25
+
+  - id: toc-tree
+    group: "期刊 TOC"
+    name: "Trends in Ecology & Evolution"
+    type: openalex
+    issn: "0169-5347"
+    lookback_days: 45
+    max_items: 20
+
+  - id: toc-natecolevol
+    group: "期刊 TOC"
+    name: "Nature Ecology & Evolution"
+    type: openalex
+    issn: "2397-334X"
+    lookback_days: 45
+    max_items: 20
+
+  - id: toc-ecolappl
+    group: "期刊 TOC"
+    name: "Ecological Applications"
+    type: openalex
+    issn: "1051-0761|1939-5582"
+    lookback_days: 45
+    max_items: 20
+
+  - id: toc-jappecol
+    group: "期刊 TOC"
+    name: "Journal of Applied Ecology"
+    type: openalex
+    issn: "0021-8901|1365-2664"
+    lookback_days: 45
+    max_items: 20
+
+  - id: toc-lscape
+    group: "期刊 TOC"
+    name: "Landscape Ecology"
+    type: openalex
+    issn: "0921-2973|1572-9761"
+    lookback_days: 45
+    max_items: 20
+
+  - id: toc-mee
+    group: "期刊 TOC"
+    name: "Methods in Ecology and Evolution"
+    type: openalex
+    issn: "2041-210X"
+    lookback_days: 45
+    max_items: 20
+
+  # ---------------------------------------------------------------- 预印本
+  - id: biorxiv-ecology
+    group: "预印本"
+    name: "bioRxiv · Ecology"
+    type: rss
+    url: "https://connect.biorxiv.org/biorxiv_xml.php?subject=ecology"
+    # 离线时 feed 里只有最近若干篇，lookback 给宽一点免得全被过滤
+    lookback_days: 30
+    max_items: 50
+
+  # ---------------------------------------------------------------- PubMed
+  # PubMed 官方「检索式 RSS」已停用，这里用 E-utilities 做等效订阅。
+  # PubMed 对纯生态刊覆盖有限，但生态学相关的这几本刊 + 跨领域检索很好用。
+  - id: pubmed-ecology
+    group: "PubMed"
+    name: "PubMed · 生态学核心刊"
+    type: pubmed
+    term: >
+      ("Ecology"[ta] OR "Ecol Lett"[ta] OR "Glob Chang Biol"[ta] OR
+       "Trends Ecol Evol"[ta] OR "Nat Ecol Evol"[ta] OR "Conserv Biol"[ta] OR
+       "Proc Biol Sci"[ta] OR "Ecol Appl"[ta])
+    lookback_days: 14
+    max_items: 40
+
+  - id: pubmed-sdm
+    group: "PubMed"
+    name: "PubMed · 分布模型检索式"
+    type: pubmed
+    term: >
+      ("species distribution model*"[tiab] OR "ecological niche model*"[tiab] OR
+       "habitat suitability model*"[tiab] OR "distribution modelling"[tiab])
+    lookback_days: 30
+    max_items: 40
+
+  # arXiv 生态/进化方向，量少，默认关闭；需要时把 enabled 改成 true
+  - id: arxiv-qbio
+    group: "预印本"
+    name: "arXiv · q-bio.PE"
+    type: rss
+    url: "https://rss.arxiv.org/rss/q-bio.PE"
+    enabled: false
+    lookback_days: 14
+    max_items: 30

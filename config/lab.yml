@@ -1,0 +1,205 @@
+# ============================================================================
+#  Lab Profile · 实验室研究画像
+#  ---------------------------------------------------------------------------
+#  这个文件是「筛选标准」的唯一来源。改完提交，下一次运行即生效。
+#  - profile   : 用自然语言描述研究方向，会原样进入 LLM 提示词，越具体越准
+#  - interests : 结构化细分方向，用于生成标签、分组展示，也参与关键词兜底打分
+#  - lexicon   : 关键词兜底打分用的词表（LLM 不可用时使用，也用于召回预筛）
+#
+#  ⚠️ 新增研究方向时，建议同时更新 profile 和 interests 两处，
+#     然后在 Actions 里手动跑一次并勾选 rescore=true 重算已有文献。
+# ============================================================================
+
+lab:
+  name: "生态学实验室"
+  name_en: "Ecology Lab"
+  # 展示在网页页头的一句话简介
+  tagline: "物种分布建模 · 入侵生物分布生态学"
+
+  # —— 自然语言研究画像（直接拼进 LLM 提示词）——
+  profile: |
+    本实验室从事广义生态学研究，当前核心方向包括：
+
+    1. 物种分布建模（Species Distribution Modelling, SDM / Ecological Niche
+       Modelling, ENM）：基于发生记录与气候/环境图层构建分布模型，关注模型算法
+      （MaxEnt、BIOMOD2、集成模型、机器学习方法）、变量选择与共线性处理、背景点
+       与伪不存在点采样、模型评估与阈值选择（AUC、TSS、Boyce 指数）、模型迁移性
+       （transferability）与空间外推风险、不确定性与尺度效应。
+    2. 入侵生物分布生态学：外来入侵物种的潜在分布预测与扩散风险、入侵过程
+       （引入—定殖—扩散）、生态位保守性与生态位漂移（niche shift）、
+       传播压力（propagule pressure）、气候匹配与气候生态位、风险评估与
+       优先监测区识别、在全球变化情景下的入侵范围变化。
+    3. 与之紧密相关的：气候变化对物种分布与范围变动的影响、生物地理学格局、
+       宏生态学、保护规划与保护区选址、生物多样性分布。
+
+    我们关注的是「空间分布的预测、解释与风险」这类工作，尤其是方法学进展、
+    模型可靠性评价、以及把模型用于入侵种/受威胁种管理决策的研究。
+    纯分子机制、细胞生物学、临床医学、农艺栽培技术类文献与我们的工作无直接关系。
+
+  # —— 结构化细分方向（网页标签分组 + 兜底打分）——
+  interests:
+    - key: sdm
+      label: "物种分布模型"
+      terms:
+        - "species distribution model"
+        - "species distribution modelling"
+        - "ecological niche model"
+        - "environmental niche model"
+        - "habitat suitability model"
+        - "maxent"
+        - "biomod"
+        - "ensemble model"
+        - "presence-only"
+        - "pseudo-absence"
+        - "background sampling"
+        - "model transferability"
+    - key: invasion
+      label: "入侵生态"
+      terms:
+        - "biological invasion"
+        - "invasive species"
+        - "alien species"
+        - "non-native species"
+        - "invasion risk"
+        - "propagule pressure"
+        - "invasion debt"
+        - "spread rate"
+        - "invasion front"
+    - key: climate
+      label: "气候变化与分布"
+      terms:
+        - "climate change"
+        - "range shift"
+        - "range expansion"
+        - "distribution shift"
+        - "climate velocity"
+        - "niche conservatism"
+        - "niche shift"
+        - "climatic suitability"
+    - key: biogeo
+      label: "生物地理 / 宏生态"
+      terms:
+        - "biogeography"
+        - "macroecology"
+        - "biodiversity pattern"
+        - "species richness"
+        - "endemism"
+        - "latitudinal gradient"
+    - key: conservation
+      label: "保护与风险评估"
+      terms:
+        - "conservation planning"
+        - "protected area"
+        - "risk assessment"
+        - "vulnerability assessment"
+        - "priority area"
+        - "extinction risk"
+    - key: methods
+      label: "方法与数据"
+      terms:
+        - "occurrence record"
+        - "remote sensing"
+        - "spatial autocorrelation"
+        - "model evaluation"
+        - "uncertainty"
+        - "ensemble forecasting"
+        - "species distribution data"
+
+# ---------------------------------------------------------------------------
+#  关键词兜底打分表
+#  must   : 高辨识度术语，命中基本就相关（标题 9 分 / 摘要 3.5 分）
+#  soft   : 常见但不够具体的说法，命中加分较少（标题 4 分 / 摘要 1.6 分）
+#  boost  : 上下文信号，命中加分（标题 5 分 / 摘要 1.8 分）
+#  exclude: 命中说明与 lab 工作无关，显著扣分（-45 分）
+# ---------------------------------------------------------------------------
+lexicon:
+  must:
+    - "species distribution model"
+    - "species distribution modelling"
+    - "ecological niche model"
+    - "environmental niche model"
+    - "niche model"
+    - "environmental niche"
+    - "range shift"
+    - "range expansion"
+    - "invasive species"
+    - "biological invasion"
+    - "alien species"
+    - "non-native species"
+    - "invasion risk"
+    - "niche conservatism"
+    - "niche shift"
+    - "niche divergence"
+    - "maxent"
+    - "biomod"
+    - "propagule pressure"
+  soft:
+    - "distribution model"
+    - "habitat suitability"
+    - "potential distribution"
+    - "predicted distribution"
+    - "climatic suitability"
+    - "climatic niche"
+    - "occurrence records"
+    - "invasion spread"
+    - "dispersal model"
+  boost:
+    - "transferability"
+    - "extrapolation"
+    - "spatial autocorrelation"
+    - "ensemble"
+    - "random forest"
+    - "boosted regression"
+    - "downscaling"
+    - "cmip6"
+    - "ssp"
+    - "auc"
+    - "tss"
+    - "boyce"
+    - "geographic range"
+    - "macroecology"
+    - "biogeography"
+    - "conservation planning"
+    - "protected area"
+    - "remote sensing"
+    - "spatial scale"
+    - "uncertainty"
+  exclude:
+    - "clinical trial"
+    - "randomized controlled"
+    - "patients"
+    - "in vitro"
+    - "knockout mice"
+    - "case report"
+    - "crop yield"
+    - "fertilizer application"
+
+# ---------------------------------------------------------------------------
+#  打分与输出
+# ---------------------------------------------------------------------------
+scoring:
+  # 网页只展示 >= min_score 的文献；0-100 分量表
+  min_score: 55
+  # 每篇被接收文献至少要达到的分数（与 min_score 同义，保留给未来细分）
+  # 每日最多推送条数（按分数取 Top N，防止某天刷屏）
+  max_per_run: 25
+  # 每次运行最多给多少篇「新文献」调用 LLM 打分（控制成本）
+  max_llm_items: 120
+  # 摘要短于该字符数视为「缺摘要」，先尝试回填
+  min_abstract_chars: 120
+
+# ---------------------------------------------------------------------------
+#  LLM 打分（OpenAI 兼容接口）。留空 api_key 走环境变量。
+#  环境变量优先级：LLM_API_KEY > OPENAI_API_KEY > DEEPSEEK_API_KEY
+# ---------------------------------------------------------------------------
+llm:
+  enabled: true
+  base_url: "https://api.deepseek.com/v1"
+  model: "deepseek-chat"
+  temperature: 0.2
+  # 每次请求打包多少篇摘要（8-10 较省 token）
+  batch_size: 8
+  # 单次请求超时（秒）
+  timeout: 90
+  # 失败重试次数
+  max_retries: 3

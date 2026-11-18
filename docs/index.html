@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文献速览</title>
+<meta name="description" content="按实验室研究方向自动筛选的文献速览">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🌿</text></svg>">
+<link rel="alternate" type="application/rss+xml" title="文献速览 RSS" href="./data/feed.xml">
+<link rel="stylesheet" href="./assets/style.css">
+<script>
+  // 提前定主题，避免刷新时闪白
+  (function () {
+    try {
+      var t = localStorage.getItem("lpa:theme");
+      if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 20 L4 12 M12 20 L12 4 M20 20 L20 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="4" cy="9" r="1.9" fill="currentColor"/>
+        <circle cx="12" cy="4" r="1.9" fill="currentColor"/>
+        <circle cx="20" cy="6" r="1.9" fill="currentColor"/>
+        <path d="M4 12 Q8 8 12 6 Q16 4 20 6" stroke="currentColor" stroke-width="1.2" fill="none" opacity=".45"/>
+      </svg>
+      <div class="brand-text">
+        <h1 id="labName">文献速览</h1>
+        <p class="tagline" id="tagline"></p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="updated">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span id="updatedAt">读取中…</span>
+      </div>
+      <button class="icon-btn" id="themeBtn" type="button" title="切换深色模式" aria-label="切换深色模式">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="wrap statbar" id="statBar" hidden></div>
+</header>
+
+<div class="wrap notice" id="modeNotice" hidden></div>
+
+<main class="wrap layout">
+  <section class="content">
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="search" type="search" placeholder="搜索标题、摘要、期刊…" autocomplete="off" aria-label="搜索文献">
+        <kbd class="kbd">/</kbd>
+      </div>
+      <select id="sort" aria-label="排序方式">
+        <option value="score">按相关度</option>
+        <option value="date">按时间</option>
+      </select>
+      <select id="minScore" aria-label="相关度筛选">
+        <option value="0">全部相关度</option>
+        <option value="60">≥ 60</option>
+        <option value="70">≥ 70</option>
+        <option value="80">≥ 80 强相关</option>
+        <option value="90">≥ 90 核心</option>
+      </select>
+      <div class="seg" role="group" aria-label="显示范围">
+        <button type="button" data-toggle="unread" class="seg-btn" aria-pressed="false">未读</button>
+        <button type="button" data-toggle="star" class="seg-btn" aria-pressed="false">收藏</button>
+      </div>
+    </div>
+
+    <div class="chip-row" id="tagRow"></div>
+
+    <div class="list-head">
+      <span id="resultCount"></span>
+      <button type="button" class="link-btn" id="resetBtn" hidden>清除筛选</button>
+    </div>
+
+    <div id="cards" class="cards" aria-live="polite"></div>
+    <div id="skeleton" class="cards" aria-hidden="true"></div>
+    <div id="emptyState" class="empty" hidden></div>
+    <div class="more-wrap">
+      <button type="button" class="more-btn" id="moreBtn" hidden>加载更多</button>
+    </div>
+  </section>
+
+  <aside class="sidebar">
+    <section class="panel">
+      <h2 class="panel-title">研究方向</h2>
+      <ul class="interest-list" id="interestList"></ul>
+      <details class="profile">
+        <summary>完整研究画像</summary>
+        <pre id="profileText"></pre>
+      </details>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel-title">文献来源</h2>
+      <div id="sourceList" class="source-list"></div>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel-title">归档</h2>
+      <div id="monthList" class="month-list"></div>
+    </section>
+
+    <section class="panel panel-notes">
+      <h2 class="panel-title">说明</h2>
+      <p id="thresholdNote"></p>
+      <p class="notes-muted">
+        每篇文献都由程序按实验室研究画像打分：<strong>≥<span id="minScoreNote">55</span></strong> 分才会出现在这里。
+        相关度低于阈值的文献不会被展示，但会记录在去重索引中，避免重复判断。
+      </p>
+      <p class="notes-muted">
+        已读 / 收藏状态保存在本机浏览器，不上传服务器。
+      </p>
+      <p class="notes-muted" id="rssNote"></p>
+    </section>
+  </aside>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <span id="footerMeta"></span>
+    <span class="footer-links">
+      <a href="./data/feed.xml">RSS</a>
+      <a href="#" id="exportBtn">导出收藏</a>
+    </span>
+  </div>
+  <div class="wrap footer-note">摘要版权归原作者与出版方所有，本页仅作实验室内部速览使用。</div>
+</footer>
+
+<script src="./assets/app.js"></script>
+</body>
+</html>

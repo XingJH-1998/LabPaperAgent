@@ -1,0 +1,99 @@
+name: 文献速览
+
+on:
+  schedule:
+    # 每天 07:00（Asia/Shanghai，即前一天 23:00 UTC）
+    - cron: "0 23 * * *"
+  workflow_dispatch:
+    inputs:
+      lookback:
+        description: "回溯天数（留空用 feeds.yml 设置）"
+        required: false
+        default: ""
+      no_llm:
+        description: "只用关键词打分（不调用 LLM，省钱/调试用）"
+        type: boolean
+        default: false
+      rescore:
+        description: "按当前 lab.yml 重算已有文献（改完研究方向后勾选）"
+        type: boolean
+        default: false
+      only:
+        description: "只跑指定 feed id（逗号分隔，调试用）"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 抓取 + 筛选 + 生成网页数据
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          OPENALEX_API_KEY: ${{ secrets.OPENALEX_API_KEY }}
+          NOTIFY_WEBHOOK: ${{ secrets.NOTIFY_WEBHOOK }}
+          NOTIFY_TYPE: ${{ secrets.NOTIFY_TYPE }}
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.lookback }}" ]; then ARGS="$ARGS --lookback ${{ inputs.lookback }}"; fi
+          if [ "${{ inputs.no_llm }}" = "true" ]; then ARGS="$ARGS --no-llm"; fi
+          if [ "${{ inputs.rescore }}" = "true" ]; then ARGS="$ARGS --rescore"; fi
+          if [ -n "${{ inputs.only }}" ]; then ARGS="$ARGS --only ${{ inputs.only }}"; fi
+          echo "运行参数：$ARGS"
+          python scripts/run.py $ARGS
+
+      - name: 提交更新
+        run: |
+          git config user.name "lab-paper-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data docs/data
+          if git diff --staged --quiet; then
+            echo "没有变化，跳过提交"
+          else
+            git commit -m "chore: 更新文献速览 $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: 汇总
+        if: always()
+        run: |
+          echo "### 文献速览运行结果" >> $GITHUB_STEP_SUMMARY
+          python - <<'PY' >> $GITHUB_STEP_SUMMARY
+          import json, pathlib
+          p = pathlib.Path("docs/data/meta.json")
+          if not p.exists():
+              print("没有生成 meta.json，检查上游步骤日志。")
+              raise SystemExit
+          m = json.loads(p.read_text(encoding="utf-8"))
+          s, r = m.get("stats", {}), m.get("run", {})
+          print(f"- 打分模式：**{m.get('mode')}**")
+          print(f"- 本轮抓取 {r.get('fetched', 0)} 篇，新增 {r.get('new', 0)} 篇，入选 {r.get('kept', 0)} 篇")
+          print(f"- 库内共 {s.get('total', 0)} 篇，本月 {s.get('this_month', 0)} 篇，≥80 分 {s.get('high_relevance', 0)} 篇")
+          print(f"- 更新时间：{m.get('generated_at_local')}")
+          PY
